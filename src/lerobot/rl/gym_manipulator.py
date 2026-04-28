@@ -18,6 +18,7 @@ import logging
 import time
 from dataclasses import dataclass
 from typing import Any
+from types import SimpleNamespace
 
 import gymnasium as gym
 import numpy as np
@@ -128,7 +129,7 @@ class RobotEnv(gym.Env):
         use_gripper: bool = False,
         display_cameras: bool = False,
         reset_pose: list[float] | None = None,
-        reset_time_s: float = 5.0,
+        reset_time_s: float = 500.0,
     ) -> None:
         """Initialize robot environment with configuration options.
 
@@ -311,7 +312,7 @@ def make_robot_env(cfg: HILSerlRobotEnvConfig) -> tuple[gym.Env, Any]:
     """
     # Check if this is a GymHIL simulation environment
     if cfg.name == "gym_hil":
-        assert cfg.robot is None and cfg.teleop is None, "GymHIL environment does not support robot or teleop"
+        #assert cfg.robot is None and cfg.teleop is None, "GymHIL environment does not support robot or teleop"
         import gym_hil  # noqa: F401
 
         # Extract gripper settings with defaults
@@ -324,9 +325,24 @@ def make_robot_env(cfg: HILSerlRobotEnvConfig) -> tuple[gym.Env, Any]:
             render_mode="human",
             use_gripper=use_gripper,
             gripper_penalty=gripper_penalty,
+            max_episode_steps=1000,
         )
 
+        # If teleop is requested (like your keyboard), initialize it and RETURN NOW
+        if cfg.teleop is not None:
+            from lerobot.teleoperators.utils import make_teleoperator_from_config
+            teleop_device = make_teleoperator_from_config(cfg.teleop)
+            # --- PATCH FOR SIMULATION ---
+            # Manually define the arm attributes that KeyboardTeleop expects.
+            # gym_hil Panda tasks use 4 control dimensions: [dx, dy, dz, gripper]
+            if not hasattr(teleop_device, "arm") or teleop_device.arm is None:
+                teleop_device.arm = SimpleNamespace(motors=["x", "y", "z", "gripper"])
+            return env, teleop_device
+        
         return env, None
+    
+        
+
 
     # Real robot environment
     assert cfg.robot is not None, "Robot config must be provided for real robot environment"
@@ -385,6 +401,7 @@ def make_processors(
             VanillaObservationProcessorStep(),
             AddBatchDimensionProcessorStep(),
             DeviceProcessorStep(device=device),
+            TimeLimitProcessorStep(max_episode_steps=8000)
         ]
 
         return DataProcessorPipeline(
