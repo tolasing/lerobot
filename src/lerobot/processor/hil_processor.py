@@ -487,7 +487,7 @@ class InterventionActionProcessorStep(ProcessorStep):
             else:
                 action_list = teleop_action
 
-            teleop_action_tensor = torch.tensor(action_list, dtype=action.dtype, device=action.device)
+            teleop_action_tensor = torch.as_tensor(action_list, dtype=action.dtype, device=action.device)
             new_transition[TransitionKey.ACTION] = teleop_action_tensor
 
         # Handle episode termination
